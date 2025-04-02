@@ -1,11 +1,25 @@
-import { Dashboard } from './components/dashboard/Dashboard'
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { SimpleLayout } from "./components/layout/SimpleLayout";
+import { Dashboard } from "./components/dashboard/Dashboard";
+import { InvoicesPage } from "./pages/InvoicesPage";
 
 function App() {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Dashboard />
-    </div>
-  )
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={
+          <SimpleLayout>
+            <Dashboard />
+          </SimpleLayout>
+        } />
+        <Route path="/faturas" element={
+          <SimpleLayout>
+            <InvoicesPage />
+          </SimpleLayout>
+        } />
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
-export default App
+export default App;
