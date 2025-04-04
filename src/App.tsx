@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { SimpleLayout } from "./components/layout/SimpleLayout";
+import { MainLayout } from "./components/layout/MainLayout";
 import { Dashboard } from "./components/dashboard/Dashboard";
 import { InvoicesPage } from "./pages/InvoicesPage";
 
@@ -8,14 +8,14 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={
-          <SimpleLayout>
+          <MainLayout>
             <Dashboard />
-          </SimpleLayout>
+          </MainLayout>
         } />
         <Route path="/faturas" element={
-          <SimpleLayout>
+          <MainLayout>
             <InvoicesPage />
-          </SimpleLayout>
+          </MainLayout>
         } />
       </Routes>
     </BrowserRouter>

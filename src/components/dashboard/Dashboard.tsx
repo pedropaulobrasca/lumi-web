@@ -1,9 +1,22 @@
 import { useEffect, useState } from "react";
-import { Invoice, invoiceService } from "@/services/invoiceService";
+import { Invoice, invoiceService, Client, InvoiceFilters } from "@/services/invoiceService";
 import { StatCard } from "./StatCard";
 import { EnergyChart } from "./EnergyChart";
 import { FinancialChart } from "./FinancialChart";
 import { formatNumber, formatCurrency } from "@/lib/utils";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 
 // Dados de exemplo para quando não há dados reais disponíveis
 const sampleInvoices: Invoice[] = [
@@ -71,45 +84,119 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [usingSampleData, setUsingSampleData] = useState(false);
+  
+  // Estado para o filtro de cliente
+  const [clientNumber, setClientNumber] = useState<string>("");
+  const [clients, setClients] = useState<Client[]>([]);
+  const [openClientPopover, setOpenClientPopover] = useState(false);
+  const [selectedClientLabel, setSelectedClientLabel] = useState<string>("");
 
-  useEffect(() => {
-    const fetchInvoices = async () => {
-      try {
-        setLoading(true);
-        const data = await invoiceService.getAll();
+  // Função para carregar os clientes
+  const loadClients = async () => {
+    try {
+      const clientsData = await invoiceService.getClients();
+      setClients(clientsData);
+    } catch (err) {
+      console.error("Erro ao carregar clientes:", err);
+    }
+  };
+
+  // Função para buscar faturas com filtros
+  const fetchInvoices = async (filters?: InvoiceFilters) => {
+    try {
+      setLoading(true);
+      const data = await invoiceService.getAll(filters);
+      
+      if (data && data.length > 0) {
+        // Garantir que todos os dados são válidos
+        const validatedData = data.map(invoice => ({
+          ...invoice,
+          // Garantir que os valores numéricos sejam números válidos
+          energyConsumption: typeof invoice.energyConsumption === 'number' ? invoice.energyConsumption : 0,
+          compensatedEnergy: typeof invoice.compensatedEnergy === 'number' ? invoice.compensatedEnergy : 0,
+          totalValueWithoutGD: typeof invoice.totalValueWithoutGD === 'number' ? invoice.totalValueWithoutGD : 0,
+          gdSavings: typeof invoice.gdSavings === 'number' ? invoice.gdSavings : 0
+        }));
         
-        if (data && data.length > 0) {
-          setInvoices(data);
-          setUsingSampleData(false);
-        } else {
-          // Se não houver dados, use os dados de exemplo
-          console.log("Sem dados reais disponíveis, usando dados de exemplo");
-          setInvoices(sampleInvoices);
-          setUsingSampleData(true);
+        setInvoices(validatedData);
+        setUsingSampleData(false);
+      } else {
+        // Se não houver dados, use os dados de exemplo
+        console.log("Sem dados reais disponíveis, usando dados de exemplo");
+        
+        // Filtrar os dados de exemplo conforme os filtros
+        let filteredSampleData = [...sampleInvoices];
+        
+        if (filters?.clientNumber) {
+          filteredSampleData = filteredSampleData.filter(
+            invoice => invoice.clientNumber === filters.clientNumber
+          );
         }
         
-        setError(null);
-      } catch (err) {
-        console.error("Erro ao buscar faturas:", err);
-        setError("Erro ao carregar os dados das faturas. Usando dados de exemplo.");
-        setInvoices(sampleInvoices);
+        setInvoices(filteredSampleData);
         setUsingSampleData(true);
-      } finally {
-        setLoading(false);
       }
-    };
+      
+      setError(null);
+    } catch (err) {
+      console.error("Erro ao buscar faturas:", err);
+      setError("Erro ao carregar os dados das faturas. Usando dados de exemplo.");
+      
+      // Se houver filtro de cliente, filtrar os dados de exemplo
+      let filteredSampleData = [...sampleInvoices];
+      if (filters?.clientNumber) {
+        filteredSampleData = filteredSampleData.filter(
+          invoice => invoice.clientNumber === filters.clientNumber
+        );
+      }
+      
+      setInvoices(filteredSampleData);
+      setUsingSampleData(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  // Função para selecionar um cliente
+  const handleSelectClient = (clientNumber: string) => {
+    setClientNumber(clientNumber);
+    const selectedClient = clients.find(c => c.clientNumber === clientNumber);
+    setSelectedClientLabel(selectedClient ? 
+      `${selectedClient.clientNumber} (${selectedClient.installationNumber})` : "");
+    setOpenClientPopover(false);
+    
+    // Aplicar o filtro
+    const filters: InvoiceFilters = { clientNumber };
+    fetchInvoices(filters);
+  };
+
+  // Função para limpar o filtro
+  const handleClearFilter = () => {
+    setClientNumber("");
+    setSelectedClientLabel("");
     fetchInvoices();
+  };
+
+  // Efeito para carregar os dados iniciais
+  useEffect(() => {
+    fetchInvoices();
+    loadClients();
   }, []);
 
   // Calcular totais para os cards
   const totals = invoices.reduce(
     (acc, invoice) => {
+      // Garantir que todos os valores sejam números válidos
+      const energyConsumption = typeof invoice.energyConsumption === 'number' ? invoice.energyConsumption : 0;
+      const compensatedEnergy = typeof invoice.compensatedEnergy === 'number' ? invoice.compensatedEnergy : 0;
+      const totalValueWithoutGD = typeof invoice.totalValueWithoutGD === 'number' ? invoice.totalValueWithoutGD : 0;
+      const gdSavings = typeof invoice.gdSavings === 'number' ? invoice.gdSavings : 0;
+      
       return {
-        totalEnergyConsumption: acc.totalEnergyConsumption + (invoice.energyConsumption || 0),
-        totalCompensatedEnergy: acc.totalCompensatedEnergy + (invoice.compensatedEnergy || 0),
-        totalValueWithoutGD: acc.totalValueWithoutGD + (invoice.totalValueWithoutGD || 0),
-        totalGDSavings: acc.totalGDSavings + (invoice.gdSavings || 0),
+        totalEnergyConsumption: acc.totalEnergyConsumption + energyConsumption,
+        totalCompensatedEnergy: acc.totalCompensatedEnergy + compensatedEnergy,
+        totalValueWithoutGD: acc.totalValueWithoutGD + totalValueWithoutGD,
+        totalGDSavings: acc.totalGDSavings + gdSavings,
       };
     },
     {
@@ -127,6 +214,62 @@ export function Dashboard() {
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-6">Dashboard de Energia</h1>
+      
+      {/* Filtro de Cliente */}
+      <div className="mb-6 p-4 border rounded-lg bg-card">
+        <div className="flex flex-col md:flex-row gap-4 items-end">
+          <div className="space-y-2 flex-1">
+            <Label htmlFor="client">Cliente</Label>
+            <Popover open={openClientPopover} onOpenChange={setOpenClientPopover}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={openClientPopover}
+                  className="w-full justify-between cursor-pointer"
+                >
+                  {selectedClientLabel || "Selecione um cliente"}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-full p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Buscar cliente..." />
+                  <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandList>
+                      {clients.map((client) => (
+                        <CommandItem
+                          key={client.clientNumber}
+                          value={client.clientNumber}
+                          onSelect={handleSelectClient}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              clientNumber === client.clientNumber ? "opacity-100" : "opacity-0"
+                            )}
+                          />
+                          {client.clientNumber} ({client.installationNumber})
+                        </CommandItem>
+                      ))}
+                    </CommandList>
+                  </CommandGroup>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+          
+          <Button 
+            onClick={handleClearFilter} 
+            variant="outline" 
+            className="cursor-pointer"
+            disabled={!clientNumber}
+          >
+            Limpar Filtro
+          </Button>
+        </div>
+      </div>
       
       {usingSampleData && (
         <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6" role="alert">
